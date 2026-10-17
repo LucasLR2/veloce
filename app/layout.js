@@ -2,11 +2,20 @@ import "./globals.css";
 
 export const metadata = {
   title: "Veloce",
-  description: "Planificador personal de contenido diario",
+  description: "Tu contenido, organizado",
+  appleWebApp: {
+    capable: true,
+    title: "Veloce",
+    statusBarStyle: "black",
+  },
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport = {
-  themeColor: "#0B1220",
+  themeColor: "#060d1f",
 };
 
 export default function RootLayout({ children }) {
