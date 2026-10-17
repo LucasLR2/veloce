@@ -21,7 +21,7 @@ import {
   alertLevel,
   alertText,
   formatDate,
-  nextFreeDate,
+  nextDateAfterLast,
   addDays,
   todayStr,
 } from "@/lib/helpers";
@@ -42,6 +42,12 @@ export default function ProjectList() {
   // null = cerrado, objeto = proyecto abierto (nuevo si no tiene id)
   const [editing, setEditing] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
+  const [toast, setToast] = useState("");
+
+  function showToast(text) {
+    setToast(text);
+    setTimeout(() => setToast(""), 2500);
+  }
 
   async function loadProjects() {
     const { data, error } = await supabase
@@ -61,11 +67,6 @@ export default function ProjectList() {
   useEffect(() => {
     loadProjects();
   }, []);
-
-  const takenDates = useMemo(
-    () => new Set(projects.map((p) => p.publish_date)),
-    [projects]
-  );
 
   const counts = useMemo(() => {
     const c = { pendiente: 0, editado: 0, publicado: 0 };
@@ -96,11 +97,13 @@ export default function ProjectList() {
       ? supabase.from("projects").update(values).eq("id", editing.id)
       : supabase.from("projects").insert(values);
 
+    const wasNew = !editing.id;
     const { error } = await query;
     if (error) return friendlyError(error);
 
     setEditing(null);
     await loadProjects();
+    showToast(wasNew ? "Proyecto creado" : "Cambios guardados");
   }
 
   async function handleDelete() {
@@ -112,6 +115,7 @@ export default function ProjectList() {
 
     setEditing(null);
     await loadProjects();
+    showToast("Proyecto borrado");
   }
 
   async function copyPhrase(project) {
@@ -125,7 +129,10 @@ export default function ProjectList() {
   }
 
   function openNew() {
-    setEditing({ publish_date: nextFreeDate(takenDates), status: "pendiente" });
+    setEditing({
+      publish_date: nextDateAfterLast(projects.map((p) => p.publish_date)),
+      status: "pendiente",
+    });
   }
 
   // Mueve el filtro de fecha un día; si no hay fecha elegida, parte desde hoy
@@ -287,6 +294,12 @@ export default function ProjectList() {
           );
         })}
       </ul>
+
+      {toast && (
+        <div className="toast" role="status">
+          {toast}
+        </div>
+      )}
 
       {editing && (
         <ProjectForm

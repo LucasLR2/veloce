@@ -16,13 +16,26 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
   const [occasion, setOccasion] = useState(initial.occasion || "");
 
   const [error, setError] = useState("");
+  const [errors, setErrors] = useState({});
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setSaving(true);
     setError("");
+
+    // Validación propia (sin los globos del navegador)
+    const found = {};
+    if (!phrase.trim()) found.phrase = "Escribí la frase del día.";
+    if (!publishDate) found.publishDate = "Elegí una fecha de publicación.";
+    if (videoUrl.trim() && !/^https?:\/\/\S+\.\S+/.test(videoUrl.trim())) {
+      found.videoUrl = "El link tiene que empezar con http:// o https://";
+    }
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
+
+    setSaving(true);
 
     const message = await onSave({
       phrase: phrase.trim(),
@@ -41,10 +54,10 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
   }
 
   async function handleDelete() {
-    if (!window.confirm("¿Borrar este proyecto? No se puede deshacer.")) return;
     setSaving(true);
     const message = await onDelete();
     if (message) {
+      setConfirmingDelete(false);
       setError(message);
       setSaving(false);
     }
@@ -66,6 +79,7 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
         className="sheet"
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
+        noValidate
       >
         <div className="sheet-head">
           <h2>{isNew ? "Nuevo proyecto" : "Editar proyecto"}</h2>
@@ -84,10 +98,13 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
           <textarea
             id="phrase"
             rows={3}
+            placeholder="Escribí la frase del día…"
+            autoFocus={isNew}
+            className={errors.phrase ? "invalid" : ""}
             value={phrase}
             onChange={(e) => setPhrase(e.target.value)}
-            required
           />
+          {errors.phrase && <p className="field-error">{errors.phrase}</p>}
           <button
             type="button"
             className="btn ghost small"
@@ -105,10 +122,13 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
             <input
               id="date"
               type="date"
+              className={errors.publishDate ? "invalid" : ""}
               value={publishDate}
               onChange={(e) => setPublishDate(e.target.value)}
-              required
             />
+            {errors.publishDate && (
+              <p className="field-error">{errors.publishDate}</p>
+            )}
           </div>
 
           <div className="field">
@@ -154,9 +174,11 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
             id="video"
             type="url"
             placeholder="https://"
+            className={errors.videoUrl ? "invalid" : ""}
             value={videoUrl}
             onChange={(e) => setVideoUrl(e.target.value)}
           />
+          {errors.videoUrl && <p className="field-error">{errors.videoUrl}</p>}
         </div>
 
         {error && <p className="error">{error}</p>}
@@ -166,7 +188,7 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
             <button
               type="button"
               className="btn danger"
-              onClick={handleDelete}
+              onClick={() => setConfirmingDelete(true)}
               disabled={saving}
             >
               Borrar
@@ -177,6 +199,46 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
           </button>
         </div>
       </form>
+
+      {confirmingDelete && (
+        <div
+          className="confirm-overlay"
+          onClick={(e) => {
+            e.stopPropagation();
+            setConfirmingDelete(false);
+          }}
+        >
+          <div
+            className="confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="confirm-title">¿Borrar este proyecto?</h3>
+            <p className="muted">
+              Se elimina la frase con todos sus datos. No se puede deshacer.
+            </p>
+            <div className="confirm-actions">
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => setConfirmingDelete(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn danger-solid"
+                onClick={handleDelete}
+                disabled={saving}
+              >
+                {saving ? "Borrando…" : "Borrar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

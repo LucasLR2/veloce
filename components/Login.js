@@ -13,8 +13,14 @@ export default function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setLoading(true);
     setError("");
+
+    if (!email.trim() || !password) {
+      setError("Completá tu email y tu contraseña.");
+      return;
+    }
+
+    setLoading(true);
 
     const { error: authError } = await supabase.auth.signInWithPassword({
       email,
@@ -27,7 +33,7 @@ export default function Login() {
 
   return (
     <main className="center login-page">
-      <form className="login-card" onSubmit={handleSubmit}>
+      <form className="login-card" onSubmit={handleSubmit} noValidate>
         <div className="login-head">
           <h1 className="logo big">Veloce</h1>
           <p className="muted">Tu contenido, organizado</p>
@@ -44,7 +50,6 @@ export default function Login() {
               placeholder="tu@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
             />
           </div>
         </div>
@@ -60,7 +65,6 @@ export default function Login() {
               placeholder="Tu contraseña"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required
             />
             <button
               type="button"
