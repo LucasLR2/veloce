@@ -18,6 +18,7 @@ import {
 import {
   STATUSES,
   statusLabel,
+  nextStatus,
   alertLevel,
   alertText,
   formatDate,
@@ -126,6 +127,32 @@ export default function ProjectList() {
     } catch {
       // si el navegador bloquea el portapapeles, no pasa nada
     }
+  }
+
+  // Pasa el proyecto al estado siguiente
+  async function cycleStatus(project) {
+    const next = nextStatus(project.status);
+
+    // Se actualiza en pantalla al instante y después se guarda
+    setProjects((list) =>
+      list.map((p) => (p.id === project.id ? { ...p, status: next } : p))
+    );
+
+    const { error } = await supabase
+      .from("projects")
+      .update({ status: next })
+      .eq("id", project.id);
+
+    if (error) {
+      setProjects((list) =>
+        list.map((p) =>
+          p.id === project.id ? { ...p, status: project.status } : p
+        )
+      );
+      showToast("No se pudo cambiar el estado");
+      return;
+    }
+    showToast(`Estado: ${statusLabel(next)}`);
   }
 
   function openNew() {
@@ -276,16 +303,16 @@ export default function ProjectList() {
         {visible.map((p) => {
           const level = alertLevel(p);
           return (
-            <li key={p.id} className={`item ${level ? `alert-${level}` : ""}`}>
+            <li
+              key={p.id}
+              className={`item item-${p.status} ${level ? `alert-${level}` : ""}`}
+            >
               <button className="item-main" onClick={() => setEditing(p)}>
                 <span className="phrase">{p.phrase}</span>
                 <span className="meta">
                   <span className="date">
                     <CalendarIcon width={18} height={18} />
                     {formatDate(p.publish_date)}
-                  </span>
-                  <span className={`tag status-${p.status}`}>
-                    {statusLabel(p.status)}
                   </span>
                   {p.occasion && <span className="tag occasion">{p.occasion}</span>}
                   {level && (
@@ -295,14 +322,23 @@ export default function ProjectList() {
                   )}
                 </span>
               </button>
-              <button
-                className="btn outline small copy"
-                onClick={() => copyPhrase(p)}
-                aria-label="Copiar frase"
-              >
-                <CopyIcon width={15} height={15} />
-                {copiedId === p.id ? "Copiada" : "Copiar"}
-              </button>
+               <div className="item-actions">
+                <button
+                  className="btn outline small"
+                  onClick={() => copyPhrase(p)}
+                  aria-label="Copiar frase"
+                >
+                  <CopyIcon width={15} height={15} />
+                  {copiedId === p.id ? "Copiada" : "Copiar"}
+                </button>
+                <button
+                  className={`btn small status-btn status-${p.status}`}
+                  onClick={() => cycleStatus(p)}
+                  aria-label={`Estado: ${statusLabel(p.status)}. Tocar para cambiar`}
+                >
+                  {statusLabel(p.status)}
+                </button>
+              </div>
             </li>
           );
         })}
