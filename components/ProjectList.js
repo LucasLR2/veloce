@@ -53,7 +53,7 @@ export default function ProjectList() {
     const { data, error } = await supabase
       .from("projects")
       .select("*")
-      .order("publish_date", { ascending: false });
+      .order("publish_date", { ascending: true });
 
     if (error) {
       setLoadError("No se pudieron cargar los proyectos.");
@@ -228,6 +228,19 @@ export default function ProjectList() {
             </button>
           ))}
         </div>
+        <select
+          className="status-select"
+          aria-label="Filtrar por estado"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          <option value="todos">Todos</option>
+          {STATUSES.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
         <button className="btn primary add" onClick={openNew}>
           <PlusIcon width={18} height={18} />
           Agregar
