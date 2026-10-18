@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { STATUSES } from "@/lib/helpers";
-import { CloseIcon, CopyIcon } from "@/components/Icons";
+import { CloseIcon, CopyIcon, PlayIcon } from "@/components/Icons";
 
 // initial: proyecto existente (con id) o valores para uno nuevo (sin id)
 export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
@@ -170,14 +170,27 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
 
         <div className="field">
           <label htmlFor="video">Link del video (opcional)</label>
-          <input
-            id="video"
-            type="url"
-            placeholder="https://"
-            className={errors.videoUrl ? "invalid" : ""}
-            value={videoUrl}
-            onChange={(e) => setVideoUrl(e.target.value)}
-          />
+          <div className="input-row">
+            <input
+              id="video"
+              type="url"
+              placeholder="https://"
+              className={errors.videoUrl ? "invalid" : ""}
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+            />
+            {/^https?:\/\//.test(videoUrl.trim()) && (
+              <a
+                className="btn outline"
+                href={videoUrl.trim()}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <PlayIcon width={18} height={18} />
+                Abrir
+              </a>
+            )}
+          </div>
           {errors.videoUrl && <p className="field-error">{errors.videoUrl}</p>}
         </div>
 

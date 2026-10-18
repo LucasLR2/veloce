@@ -245,6 +245,25 @@ button {
   background: var(--surface);
 }
 
+a.btn {
+  text-decoration: none;
+}
+
+.top-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
 .btn:disabled {
   opacity: 0.5;
   cursor: default;
@@ -633,6 +652,19 @@ button {
   flex-direction: column;
   gap: 8px;
   align-self: center;
+}
+
+.item-actions-row {
+  display: flex;
+  gap: 8px;
+}
+
+.item-actions-row button {
+  flex: 1;
+}
+
+.item-actions-row .play {
+  padding: 7px 10px;
 }
 
 .item-actions .btn {

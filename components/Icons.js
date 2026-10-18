@@ -105,3 +105,16 @@ export const EyeOffIcon = (p) => (
     <path d="M6.6 7.6A16.6 16.6 0 0 0 2 12s3.5 6 10 6c1.6 0 3-.3 4.2-.8" />
   </svg>
 );
+
+export const PlayIcon = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m10 8.5 6 3.5-6 3.5z" />
+  </svg>
+);
+
+export const FolderIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />
+  </svg>
+);

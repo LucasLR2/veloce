@@ -14,6 +14,8 @@ import {
   ChevronRightIcon,
   CopyIcon,
   CloseIcon,
+  PlayIcon,
+  FolderIcon,
 } from "@/components/Icons";
 import {
   STATUSES,
@@ -26,6 +28,9 @@ import {
   addDays,
   todayStr,
 } from "@/lib/helpers";
+
+// Dirección de tu carpeta de OneDrive (se configura en .env.local y en Vercel)
+const FOLDER_URL = process.env.NEXT_PUBLIC_ONEDRIVE_FOLDER_URL;
 
 function two(n) {
   return String(n).padStart(2, "0");
@@ -183,9 +188,25 @@ export default function ProjectList() {
           <span className="divider" />
           <span className="tagline">Tu contenido, organizado</span>
         </div>
-        <button className="btn outline" onClick={() => supabase.auth.signOut()}>
-          Salir
-        </button>
+        <div className="top-actions">
+          {FOLDER_URL && (
+            <a
+              className="btn outline"
+              href={FOLDER_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <FolderIcon width={18} height={18} />
+              Carpeta
+            </a>
+          )}
+          <button
+            className="btn outline"
+            onClick={() => supabase.auth.signOut()}
+          >
+            Salir
+          </button>
+        </div>
       </header>
 
       <div className="toolbar">
@@ -322,15 +343,29 @@ export default function ProjectList() {
                   )}
                 </span>
               </button>
-               <div className="item-actions">
-                <button
-                  className="btn outline small"
-                  onClick={() => copyPhrase(p)}
-                  aria-label="Copiar frase"
-                >
-                  <CopyIcon width={15} height={15} />
-                  {copiedId === p.id ? "Copiada" : "Copiar"}
-                </button>
+              <div className="item-actions">
+                <div className="item-actions-row">
+                  {p.video_url && (
+                    <a
+                      className="btn outline small play"
+                      href={p.video_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Ver video"
+                      title="Ver video"
+                    >
+                      <PlayIcon width={18} height={18} />
+                    </a>
+                  )}
+                  <button
+                    className="btn outline small"
+                    onClick={() => copyPhrase(p)}
+                    aria-label="Copiar frase"
+                  >
+                    <CopyIcon width={15} height={15} />
+                    {copiedId === p.id ? "Copiada" : "Copiar"}
+                  </button>
+                </div>
                 <button
                   className={`btn small status-btn status-${p.status}`}
                   onClick={() => cycleStatus(p)}
