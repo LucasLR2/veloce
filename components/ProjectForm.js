@@ -5,21 +5,24 @@ import { STATUSES } from "@/lib/helpers";
 import { CloseIcon, CopyIcon, PlayIcon } from "@/components/Icons";
 
 // initial: proyecto existente (con id) o valores para uno nuevo (sin id)
-export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
+export default function ProjectForm({
+  initial,
+  onSave,
+  onDelete,
+  onClose,
+  onNotify,
+}) {
   const isNew = !initial.id;
 
   const [phrase, setPhrase] = useState(initial.phrase || "");
   const [publishDate, setPublishDate] = useState(initial.publish_date || "");
   const [status, setStatus] = useState(initial.status || "pendiente");
-  const [description, setDescription] = useState(initial.description || "");
   const [videoUrl, setVideoUrl] = useState(initial.video_url || "");
-  const [occasion, setOccasion] = useState(initial.occasion || "");
 
   const [error, setError] = useState("");
   const [errors, setErrors] = useState({});
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -27,10 +30,13 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
 
     // Validación propia (sin los globos del navegador)
     const found = {};
+    const link = videoUrl.trim();
     if (!phrase.trim()) found.phrase = "Escribí la frase del día.";
     if (!publishDate) found.publishDate = "Elegí una fecha de publicación.";
-    if (videoUrl.trim() && !/^https?:\/\/\S+\.\S+/.test(videoUrl.trim())) {
+    if (link && !/^https?:\/\/\S+\.\S+/.test(link)) {
       found.videoUrl = "El link tiene que empezar con http:// o https://";
+    } else if (!link && status !== "pendiente") {
+      found.videoUrl = "Para marcar el proyecto como Editado o Publicado necesitás el link del video.";
     }
     setErrors(found);
     if (Object.keys(found).length > 0) return;
@@ -41,9 +47,7 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
       phrase: phrase.trim(),
       publish_date: publishDate,
       status,
-      description: description.trim() || null,
-      video_url: videoUrl.trim() || null,
-      occasion: occasion.trim() || null,
+      video_url: link || null,
     });
 
     // onSave devuelve un texto de error, o nada si salió bien
@@ -66,10 +70,9 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
   async function copyPhrase() {
     try {
       await navigator.clipboard.writeText(phrase);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      onNotify("Frase copiada");
     } catch {
-      setError("No se pudo copiar la frase.");
+      onNotify("No se pudo copiar la frase");
     }
   }
 
@@ -112,11 +115,11 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
             disabled={!phrase}
           >
             <CopyIcon width={16} height={16} />
-            {copied ? "Copiada" : "Copiar frase"}
+            Copiar frase
           </button>
         </div>
 
-        <div className="row2">
+        <div className={isNew ? "" : "row2"}>
           <div className="field">
             <label htmlFor="date">Fecha de publicación</label>
             <input
@@ -131,41 +134,22 @@ export default function ProjectForm({ initial, onSave, onDelete, onClose }) {
             )}
           </div>
 
-          <div className="field">
-            <label htmlFor="status">Estado</label>
-            <select
-              id="status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              {STATUSES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="field">
-          <label htmlFor="occasion">Ocasión (opcional)</label>
-          <input
-            id="occasion"
-            type="text"
-            placeholder="Año Nuevo, Día de la Madre…"
-            value={occasion}
-            onChange={(e) => setOccasion(e.target.value)}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="description">Qué muestra el video (opcional)</label>
-          <textarea
-            id="description"
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+          {!isNew && (
+            <div className="field">
+              <label htmlFor="status">Estado</label>
+              <select
+                id="status"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                {STATUSES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="field">

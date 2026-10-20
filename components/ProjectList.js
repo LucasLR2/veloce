@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import ProjectForm from "@/components/ProjectForm";
+import LinkPrompt from "@/components/LinkPrompt";
 import {
   SearchIcon,
   CalendarIcon,
@@ -13,12 +14,10 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CopyIcon,
-  CloseIcon,
   PlayIcon,
   FolderIcon,
 } from "@/components/Icons";
 import {
-  STATUSES,
   statusLabel,
   nextStatus,
   alertLevel,
@@ -47,12 +46,15 @@ export default function ProjectList() {
 
   // null = cerrado, objeto = proyecto abierto (nuevo si no tiene id)
   const [editing, setEditing] = useState(null);
-  const [copiedId, setCopiedId] = useState(null);
+  // null = cerrado, { project, next } = pidiendo el link del video
+  const [linkPrompt, setLinkPrompt] = useState(null);
   const [toast, setToast] = useState("");
+  const toastTimer = useRef(null);
 
   function showToast(text) {
     setToast(text);
-    setTimeout(() => setToast(""), 2500);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(""), 2500);
   }
 
   async function loadProjects() {
@@ -127,37 +129,53 @@ export default function ProjectList() {
   async function copyPhrase(project) {
     try {
       await navigator.clipboard.writeText(project.phrase);
-      setCopiedId(project.id);
-      setTimeout(() => setCopiedId(null), 1500);
+      showToast("Frase copiada");
     } catch {
-      // si el navegador bloquea el portapapeles, no pasa nada
+      showToast("No se pudo copiar la frase");
     }
   }
 
-  // Pasa el proyecto al estado siguiente
-  async function cycleStatus(project) {
-    const next = nextStatus(project.status);
+  // Cambia el estado (y, si hace falta, el link). Devuelve un texto de error si falla.
+  async function applyStatus(project, next, extra = {}) {
+    const changes = { status: next, ...extra };
 
     // Se actualiza en pantalla al instante y después se guarda
     setProjects((list) =>
-      list.map((p) => (p.id === project.id ? { ...p, status: next } : p))
+      list.map((p) => (p.id === project.id ? { ...p, ...changes } : p))
     );
 
     const { error } = await supabase
       .from("projects")
-      .update({ status: next })
+      .update(changes)
       .eq("id", project.id);
 
     if (error) {
       setProjects((list) =>
-        list.map((p) =>
-          p.id === project.id ? { ...p, status: project.status } : p
-        )
+        list.map((p) => (p.id === project.id ? project : p))
       );
-      showToast("No se pudo cambiar el estado");
-      return;
+      return "No se pudo cambiar el estado. Probá de nuevo.";
     }
     showToast(`Estado: ${statusLabel(next)}`);
+  }
+
+  // Pasa el proyecto al estado siguiente. Para Editado o Publicado hace falta el link.
+  async function cycleStatus(project) {
+    const next = nextStatus(project.status);
+
+    if (next !== "pendiente" && !project.video_url) {
+      setLinkPrompt({ project, next });
+      return;
+    }
+
+    const message = await applyStatus(project, next);
+    if (message) showToast(message);
+  }
+
+  async function confirmLink(link) {
+    const { project, next } = linkPrompt;
+    const message = await applyStatus(project, next, { video_url: link });
+    if (message) return message;
+    setLinkPrompt(null);
   }
 
   function openNew() {
@@ -172,6 +190,7 @@ export default function ProjectList() {
     setDateFilter(addDays(dateFilter || todayStr(), days));
   }
 
+  const isToday = dateFilter === todayStr();
   const hasFilters = search || dateFilter || statusFilter !== "todos";
 
   const stats = [
@@ -237,23 +256,14 @@ export default function ProjectList() {
           >
             <ChevronLeftIcon />
           </button>
-          {dateFilter && dateFilter !== todayStr() ? (
-            <button
-              className="icon-btn"
-              onClick={() => setDateFilter("")}
-              aria-label="Quitar filtro de fecha"
-            >
-              <CloseIcon />
-            </button>
-          ) : (
-            <button
-              className={`icon-btn today ${dateFilter ? "on" : ""}`}
-              onClick={() => setDateFilter(dateFilter ? "" : todayStr())}
-              aria-label="Filtrar por hoy"
-            >
-              Hoy
-            </button>
-          )}
+          <button
+            className={`icon-btn today ${isToday ? "on" : ""}`}
+            onClick={() => setDateFilter(isToday ? "" : todayStr())}
+            aria-pressed={isToday}
+            aria-label="Filtrar por hoy"
+          >
+            Hoy
+          </button>
           <button
             className="icon-btn"
             onClick={() => shiftDate(1)}
@@ -265,47 +275,28 @@ export default function ProjectList() {
       </div>
 
       <div className="actions">
-        <div className="chips" role="group" aria-label="Filtrar por estado">
-          {[{ value: "todos", label: "Todos" }, ...STATUSES].map((s) => (
-            <button
-              key={s.value}
-              className={`chip ${statusFilter === s.value ? "on" : ""}`}
-              onClick={() => setStatusFilter(s.value)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <select
-          className="status-select"
-          aria-label="Filtrar por estado"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="todos">Todos</option>
-          {STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
         <button className="btn primary add" onClick={openNew}>
           <PlusIcon width={18} height={18} />
           Agregar
         </button>
       </div>
 
-      <section className="stats" aria-label="Resumen por estado">
+      <section className="stats" aria-label="Filtrar por estado">
         {stats.map(({ key, label, Icon }) => (
-          <div key={key} className="stat">
+          <button
+            key={key}
+            className={`stat ${statusFilter === key ? "on" : ""}`}
+            aria-pressed={statusFilter === key}
+            onClick={() => setStatusFilter(statusFilter === key ? "todos" : key)}
+          >
             <span className={`stat-icon status-${key}`}>
               <Icon width={22} height={22} />
             </span>
-            <div>
-              <div className="stat-label">{label}</div>
-              <div className="stat-number">{two(counts[key])}</div>
-            </div>
-          </div>
+            <span className="stat-text">
+              <span className="stat-label">{label}</span>
+              <span className="stat-number">{two(counts[key])}</span>
+            </span>
+          </button>
         ))}
       </section>
 
@@ -335,7 +326,6 @@ export default function ProjectList() {
                     <CalendarIcon width={18} height={18} />
                     {formatDate(p.publish_date)}
                   </span>
-                  {p.occasion && <span className="tag occasion">{p.occasion}</span>}
                   {level && (
                     <span className={`alert-text text-${level}`}>
                       {alertText(p)}
@@ -343,6 +333,7 @@ export default function ProjectList() {
                   )}
                 </span>
               </button>
+
               <div className="item-actions">
                 <div className="item-actions-row">
                   {p.video_url && (
@@ -363,7 +354,7 @@ export default function ProjectList() {
                     aria-label="Copiar frase"
                   >
                     <CopyIcon width={15} height={15} />
-                    {copiedId === p.id ? "Copiada" : "Copiar"}
+                    Copiar
                   </button>
                 </div>
                 <button
@@ -385,12 +376,21 @@ export default function ProjectList() {
         </div>
       )}
 
+      {linkPrompt && (
+        <LinkPrompt
+          nextLabel={statusLabel(linkPrompt.next)}
+          onConfirm={confirmLink}
+          onCancel={() => setLinkPrompt(null)}
+        />
+      )}
+
       {editing && (
         <ProjectForm
           initial={editing}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditing(null)}
+          onNotify={showToast}
         />
       )}
     </main>
