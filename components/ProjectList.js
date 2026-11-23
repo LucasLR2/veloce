@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import ProjectDrawer from "@/components/ProjectDrawer";
 import BatchForm from "@/components/BatchForm";
-import { SearchIcon, ClockIcon, UploadIcon, CheckCircleIcon, PlusIcon, CopyIcon } from "@/components/Icons";
+import { SearchIcon, ClockIcon, UploadIcon, CheckCircleIcon, PlusIcon, CopyIcon, ChevronLeftIcon, ChevronRightIcon } from "@/components/Icons";
 import { effectiveStatus, statusLabel, alertLevel, alertText, formatDate, nextDateAfterLast, coverage, missingDays } from "@/lib/helpers";
 
+const PAGE_SIZE = 8;
 const two = (n) => String(n).padStart(2, "0");
 
 export default function ProjectList() {
@@ -14,6 +15,7 @@ export default function ProjectList() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("todos");
   const [editing, setEditing] = useState(null); // proyecto abierto en el panel
   const [batchOpen, setBatchOpen] = useState(false);
@@ -64,6 +66,13 @@ export default function ProjectList() {
       (statusFilter === "todos" || effectiveStatus(p) === statusFilter));
   }, [projects, search, statusFilter]);
 
+  // Paginado
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const current = Math.min(page, totalPages);
+  const pageItems = visible.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const firstPage = Math.max(1, Math.min(current - 2, totalPages - 4));
+  const pages = Array.from({ length: Math.min(5, totalPages) }, (_, i) => firstPage + i);
+
   const friendly = (e) => (e.code === "23505" ? "Ya hay un proyecto en una de esas fechas." : "No se pudo guardar. Probá de nuevo.");
 
   async function handleSave(values) {
@@ -112,7 +121,12 @@ export default function ProjectList() {
         <div className="head-actions">
           <label className="search-wrap">
             <SearchIcon width={18} height={18} />
-            <input ref={searchRef} placeholder="Buscar frases…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input
+              ref={searchRef}
+              placeholder="Buscar frases…"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
             <kbd>/</kbd>
           </label>
           <button className="btn primary" onClick={() => setBatchOpen(true)}>
@@ -123,7 +137,11 @@ export default function ProjectList() {
 
       <section className="kpis">
         {kpis.map(({ key, label, Icon }) => (
-          <button key={key} className={`kpi ${statusFilter === key ? "on" : ""}`} onClick={() => setStatusFilter(statusFilter === key ? "todos" : key)}>
+          <button
+            key={key}
+            className={`kpi ${statusFilter === key ? "on" : ""}`}
+            onClick={() => { setStatusFilter(statusFilter === key ? "todos" : key); setPage(1); }}
+          >
             <span className="kpi-top"><Icon width={20} height={20} /> {label}</span>
             <span className="kpi-num">{two(counts[key])}</span>
           </button>
@@ -145,39 +163,91 @@ export default function ProjectList() {
         {!loading && !loadError && visible.length === 0 && (
           <p className="muted empty">{projects.length ? "Nada coincide con tu búsqueda." : "Todavía no hay frases. Tocá Agregar frases para empezar."}</p>
         )}
+
         {visible.length > 0 && (
-          <table>
-            <thead>
-              <tr><th style={{ width: 170 }}>Fecha</th><th>Frase</th><th style={{ width: 140 }}>Estado</th><th style={{ width: 190 }}>YouTube</th><th style={{ width: 60 }} /></tr>
-            </thead>
-            <tbody>
-              {visible.map((p) => {
-                const st = effectiveStatus(p);
-                const level = alertLevel(p);
-                const cls = level === "rojo" ? "a-bad" : level ? "a-warn" : "";
-                return (
-                  <tr key={p.id} className={`${cls} ${editing?.id === p.id ? "sel" : ""}`} onClick={() => setEditing(p)}>
-                    <td className="fixed">{formatDate(p.publish_date)}</td>
-                    <td>
-                      {p.phrase}
-                      {level && <span className={`alert-text ${level === "rojo" ? "bad" : "warn"}`}>{alertText(p)}</span>}
-                    </td>
-                    <td className="fixed"><span className={`pill ${st}`}>{statusLabel(st)}</span></td>
-                    <td className="fixed">
-                      {p.youtube_url ? <a className="yt" href={p.youtube_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Ver video</a> : <span className="muted">—</span>}
-                    </td>
-                    <td className="fixed"><button className="btn small" onClick={(e) => copy(e, p)} aria-label="Copiar frase"><CopyIcon width={15} height={15} /></button></td>
+          <>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: 170 }}>Fecha</th>
+                    <th>Frase</th>
+                    <th style={{ width: 140 }}>Estado</th>
+                    <th style={{ width: 190 }}>YouTube</th>
+                    <th style={{ width: 60 }} />
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {pageItems.map((p) => {
+                    const st = effectiveStatus(p);
+                    const level = alertLevel(p);
+                    const cls = level === "rojo" ? "a-bad" : level ? "a-warn" : "";
+                    return (
+                      <tr key={p.id} className={`${cls} ${editing?.id === p.id ? "sel" : ""}`} onClick={() => setEditing(p)}>
+                        <td className="fixed">{formatDate(p.publish_date)}</td>
+                        <td>
+                          {p.phrase}
+                          {level && <span className={`alert-text ${level === "rojo" ? "bad" : "warn"}`}>{alertText(p)}</span>}
+                        </td>
+                        <td className="fixed"><span className={`pill ${st}`}>{statusLabel(st)}</span></td>
+                        <td className="fixed">
+                          {p.youtube_url
+                            ? <a className="yt" href={p.youtube_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Ver video</a>
+                            : <span className="muted">—</span>}
+                        </td>
+                        <td className="fixed">
+                          <button className="btn small" onClick={(e) => copy(e, p)} aria-label="Copiar frase">
+                            <CopyIcon width={15} height={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pager">
+              <span className="muted">
+                {(current - 1) * PAGE_SIZE + 1}–{Math.min(current * PAGE_SIZE, visible.length)} de {visible.length}
+              </span>
+              <div className="pager-btns">
+                <button className="btn small" onClick={() => setPage(current - 1)} disabled={current === 1} aria-label="Página anterior">
+                  <ChevronLeftIcon width={16} height={16} />
+                </button>
+                {pages.map((n) => (
+                  <button key={n} className={`btn small ${n === current ? "primary" : ""}`} onClick={() => setPage(n)}>
+                    {n}
+                  </button>
+                ))}
+                <button className="btn small" onClick={() => setPage(current + 1)} disabled={current === totalPages} aria-label="Página siguiente">
+                  <ChevronRightIcon width={16} height={16} />
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
       {toast && <div className="toast" role="status">{toast}</div>}
-      {batchOpen && <BatchForm startDate={nextDateAfterLast(projects.map((p) => p.publish_date))} takenDates={projects.map((p) => p.publish_date)} onSave={handleBatch} onClose={() => setBatchOpen(false)} />}
-      {editing && <ProjectDrawer key={editing.id} project={editing} onSave={handleSave} onDelete={handleDelete} onClose={() => setEditing(null)} onNotify={showToast} />}
+      {batchOpen && (
+        <BatchForm
+          startDate={nextDateAfterLast(projects.map((p) => p.publish_date))}
+          takenDates={projects.map((p) => p.publish_date)}
+          onSave={handleBatch}
+          onClose={() => setBatchOpen(false)}
+        />
+      )}
+      {editing && (
+        <ProjectDrawer
+          key={editing.id}
+          project={editing}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onClose={() => setEditing(null)}
+          onNotify={showToast}
+        />
+      )}
     </main>
   );
 }

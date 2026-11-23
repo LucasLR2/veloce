@@ -120,3 +120,18 @@ tbody tr.a-bad { border-left-color: var(--bad); }
 .field .input-icon input { padding-left: 42px; padding-right: 44px; }
 .eye { position: absolute; right: 6px; width: 36px; height: 36px; display: grid; place-items: center; background: none; border: 0; color: var(--muted); }
 .btn.block { width: 100%; }
+
+/* Sin scrollbars visibles */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; }
+
+/* La pantalla ocupa el alto exacto y la tabla se estira hasta abajo */
+.shell { height: 100vh; }
+.main { height: calc(100vh - 32px); min-height: 0; padding-bottom: 0; }
+.table-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.table-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* Paginado */
+.pager { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid var(--line); }
+.pager-btns { display: flex; gap: 6px; }
+.pager .btn.small { min-width: 34px; padding: 0 10px; }
