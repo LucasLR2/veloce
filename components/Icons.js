@@ -118,3 +118,15 @@ export const FolderIcon = (p) => (
     <path d="M3.5 7.5a2 2 0 0 1 2-2H10l2 2.5h6.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />
   </svg>
 );
+
+export const LogOutIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 8l4 4-4 4M20 12H9" />
+  </svg>
+);
+
+export const UploadIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 16V5M7 9l5-5 5 5M5 20h14" />
+  </svg>
+);

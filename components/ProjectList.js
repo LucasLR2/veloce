@@ -2,54 +2,24 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import ProjectForm from "@/components/ProjectForm";
-import LinkPrompt from "@/components/LinkPrompt";
-import {
-  SearchIcon,
-  CalendarIcon,
-  ClockIcon,
-  PencilIcon,
-  CheckCircleIcon,
-  PlusIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CopyIcon,
-  PlayIcon,
-  FolderIcon,
-} from "@/components/Icons";
-import {
-  statusLabel,
-  nextStatus,
-  alertLevel,
-  alertText,
-  formatDate,
-  nextDateAfterLast,
-  addDays,
-  todayStr,
-} from "@/lib/helpers";
+import ProjectDrawer from "@/components/ProjectDrawer";
+import BatchForm from "@/components/BatchForm";
+import { SearchIcon, ClockIcon, UploadIcon, CheckCircleIcon, PlusIcon, CopyIcon } from "@/components/Icons";
+import { effectiveStatus, statusLabel, alertLevel, alertText, formatDate, nextDateAfterLast, coverage, missingDays } from "@/lib/helpers";
 
-// Dirección de tu carpeta de OneDrive (se configura en .env.local y en Vercel)
-const FOLDER_URL = process.env.NEXT_PUBLIC_ONEDRIVE_FOLDER_URL;
-
-function two(n) {
-  return String(n).padStart(2, "0");
-}
+const two = (n) => String(n).padStart(2, "0");
 
 export default function ProjectList() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-
   const [search, setSearch] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
-
-  // null = cerrado, objeto = proyecto abierto (nuevo si no tiene id)
-  const [editing, setEditing] = useState(null);
-  // null = cerrado, { project, next } = pidiendo el link del video
-  const [linkPrompt, setLinkPrompt] = useState(null);
+  const [editing, setEditing] = useState(null); // proyecto abierto en el panel
+  const [batchOpen, setBatchOpen] = useState(false);
   const [toast, setToast] = useState("");
   const toastTimer = useRef(null);
+  const searchRef = useRef(null);
 
   function showToast(text) {
     setToast(text);
@@ -57,342 +27,157 @@ export default function ProjectList() {
     toastTimer.current = setTimeout(() => setToast(""), 2500);
   }
 
-  async function loadProjects() {
-    const { data, error } = await supabase
-      .from("projects")
-      .select("*")
-      .order("publish_date", { ascending: true });
-
-    if (error) {
-      setLoadError("No se pudieron cargar los proyectos.");
-    } else {
-      setProjects(data);
-      setLoadError("");
-    }
+  async function load() {
+    const { data, error } = await supabase.from("projects").select("*").order("publish_date", { ascending: true });
+    if (error) setLoadError("No se pudieron cargar los proyectos.");
+    else { setProjects(data); setLoadError(""); }
     setLoading(false);
   }
+  useEffect(() => { load(); }, []);
 
+  // Atajos: N agrega frases, / busca, Esc cierra
   useEffect(() => {
-    loadProjects();
+    function onKey(e) {
+      const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName);
+      if (e.key === "Escape") { setEditing(null); setBatchOpen(false); }
+      if (typing || e.metaKey || e.ctrlKey) return;
+      if (e.key === "n" || e.key === "N") { e.preventDefault(); setBatchOpen(true); }
+      if (e.key === "/") { e.preventDefault(); searchRef.current?.focus(); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   const counts = useMemo(() => {
-    const c = { pendiente: 0, editado: 0, publicado: 0 };
-    projects.forEach((p) => {
-      if (c[p.status] !== undefined) c[p.status] += 1;
-    });
+    const c = { pendiente: 0, subido: 0, publicado: 0 };
+    projects.forEach((p) => { c[effectiveStatus(p)] += 1; });
     return c;
   }, [projects]);
 
+  const cover = useMemo(() => coverage(projects), [projects]);
+  const gaps = useMemo(() => missingDays(projects), [projects]);
+
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return projects.filter((p) => {
-      if (q && !p.phrase.toLowerCase().includes(q)) return false;
-      if (dateFilter && p.publish_date !== dateFilter) return false;
-      if (statusFilter !== "todos" && p.status !== statusFilter) return false;
-      return true;
-    });
-  }, [projects, search, dateFilter, statusFilter]);
+    return projects.filter((p) =>
+      (!q || p.phrase.toLowerCase().includes(q)) &&
+      (statusFilter === "todos" || effectiveStatus(p) === statusFilter));
+  }, [projects, search, statusFilter]);
 
-  function friendlyError(error) {
-    if (error.code === "23505") return "Ya hay un proyecto para esa fecha.";
-    return "No se pudo guardar. Probá de nuevo.";
-  }
+  const friendly = (e) => (e.code === "23505" ? "Ya hay un proyecto en una de esas fechas." : "No se pudo guardar. Probá de nuevo.");
 
-  // Devuelve un texto de error, o nada si salió bien
   async function handleSave(values) {
-    const query = editing.id
-      ? supabase.from("projects").update(values).eq("id", editing.id)
-      : supabase.from("projects").insert(values);
-
-    const wasNew = !editing.id;
-    const { error } = await query;
-    if (error) return friendlyError(error);
-
+    const isNew = !editing.id;
+    const { error } = isNew
+      ? await supabase.from("projects").insert(values)
+      : await supabase.from("projects").update(values).eq("id", editing.id);
+    if (error) return friendly(error);
     setEditing(null);
-    await loadProjects();
-    showToast(wasNew ? "Proyecto creado" : "Cambios guardados");
+    await load();
+    showToast(isNew ? "Proyecto creado" : "Cambios guardados");
   }
 
   async function handleDelete() {
-    const { error } = await supabase
-      .from("projects")
-      .delete()
-      .eq("id", editing.id);
-    if (error) return "No se pudo borrar. Probá de nuevo.";
-
+    const { error } = await supabase.from("projects").delete().eq("id", editing.id);
+    if (error) return "No se pudo borrar.";
     setEditing(null);
-    await loadProjects();
+    await load();
     showToast("Proyecto borrado");
   }
 
-  async function copyPhrase(project) {
-    try {
-      await navigator.clipboard.writeText(project.phrase);
-      showToast("Frase copiada");
-    } catch {
-      showToast("No se pudo copiar la frase");
-    }
+  async function handleBatch(rows) {
+    const { error } = await supabase.from("projects").insert(rows);
+    if (error) return friendly(error);
+    setBatchOpen(false);
+    await load();
+    showToast(`${rows.length} frases agregadas`);
   }
 
-  // Cambia el estado (y, si hace falta, el link). Devuelve un texto de error si falla.
-  async function applyStatus(project, next, extra = {}) {
-    const changes = { status: next, ...extra };
-
-    // Se actualiza en pantalla al instante y después se guarda
-    setProjects((list) =>
-      list.map((p) => (p.id === project.id ? { ...p, ...changes } : p))
-    );
-
-    const { error } = await supabase
-      .from("projects")
-      .update(changes)
-      .eq("id", project.id);
-
-    if (error) {
-      setProjects((list) =>
-        list.map((p) => (p.id === project.id ? project : p))
-      );
-      return "No se pudo cambiar el estado. Probá de nuevo.";
-    }
-    showToast(`Estado: ${statusLabel(next)}`);
+  async function copy(e, p) {
+    e.stopPropagation();
+    try { await navigator.clipboard.writeText(p.phrase); showToast("Frase copiada"); }
+    catch { showToast("No se pudo copiar"); }
   }
 
-  // Pasa el proyecto al estado siguiente. Para Editado o Publicado hace falta el link.
-  async function cycleStatus(project) {
-    const next = nextStatus(project.status);
-
-    if (next !== "pendiente" && !project.video_url) {
-      setLinkPrompt({ project, next });
-      return;
-    }
-
-    const message = await applyStatus(project, next);
-    if (message) showToast(message);
-  }
-
-  async function confirmLink(link) {
-    const { project, next } = linkPrompt;
-    const message = await applyStatus(project, next, { video_url: link });
-    if (message) return message;
-    setLinkPrompt(null);
-  }
-
-  function openNew() {
-    setEditing({
-      publish_date: nextDateAfterLast(projects.map((p) => p.publish_date)),
-      status: "pendiente",
-    });
-  }
-
-  // Mueve el filtro de fecha un día; si no hay fecha elegida, parte desde hoy
-  function shiftDate(days) {
-    setDateFilter(addDays(dateFilter || todayStr(), days));
-  }
-
-  const isToday = dateFilter === todayStr();
-  const hasFilters = search || dateFilter || statusFilter !== "todos";
-
-  const stats = [
+  const kpis = [
     { key: "pendiente", label: "Pendientes", Icon: ClockIcon },
-    { key: "editado", label: "Editados", Icon: PencilIcon },
+    { key: "subido", label: "Subidos", Icon: UploadIcon },
     { key: "publicado", label: "Publicados", Icon: CheckCircleIcon },
   ];
 
   return (
-    <main className="app">
-      <header className="topbar">
-        <div className="brand">
-          <h1 className="logo">Veloce</h1>
-          <span className="divider" />
-          <span className="tagline">Tu contenido, organizado</span>
-        </div>
-        <div className="top-actions">
-          {FOLDER_URL && (
-            <a
-              className="btn outline"
-              href={FOLDER_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <FolderIcon width={18} height={18} />
-              Carpeta
-            </a>
-          )}
-          <button
-            className="btn outline"
-            onClick={() => supabase.auth.signOut()}
-          >
-            Salir
+    <main className="main">
+      <header className="head">
+        <h1>Proyectos</h1>
+        <div className="head-actions">
+          <label className="search-wrap">
+            <SearchIcon width={18} height={18} />
+            <input ref={searchRef} placeholder="Buscar frases…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <kbd>/</kbd>
+          </label>
+          <button className="btn primary" onClick={() => setBatchOpen(true)}>
+            <PlusIcon width={18} height={18} /> Agregar frases <kbd>N</kbd>
           </button>
         </div>
       </header>
 
-      <div className="toolbar">
-        <div className="search-wrap">
-          <SearchIcon />
-          <input
-            className="search"
-            type="search"
-            placeholder="Buscar una frase…"
-            aria-label="Buscar por frase"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div className="date-nav">
-          <input
-            className="datefilter"
-            type="date"
-            aria-label="Filtrar por fecha"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-          />
-          <button
-            className="icon-btn"
-            onClick={() => shiftDate(-1)}
-            aria-label="Día anterior"
-          >
-            <ChevronLeftIcon />
-          </button>
-          <button
-            className={`icon-btn today ${isToday ? "on" : ""}`}
-            onClick={() => setDateFilter(isToday ? "" : todayStr())}
-            aria-pressed={isToday}
-            aria-label="Filtrar por hoy"
-          >
-            Hoy
-          </button>
-          <button
-            className="icon-btn"
-            onClick={() => shiftDate(1)}
-            aria-label="Día siguiente"
-          >
-            <ChevronRightIcon />
-          </button>
-        </div>
-      </div>
-
-      <div className="actions">
-        <button className="btn primary add" onClick={openNew}>
-          <PlusIcon width={18} height={18} />
-          Agregar
-        </button>
-      </div>
-
-      <section className="stats" aria-label="Filtrar por estado">
-        {stats.map(({ key, label, Icon }) => (
-          <button
-            key={key}
-            className={`stat ${statusFilter === key ? "on" : ""}`}
-            aria-pressed={statusFilter === key}
-            onClick={() => setStatusFilter(statusFilter === key ? "todos" : key)}
-          >
-            <span className={`stat-icon status-${key}`}>
-              <Icon width={22} height={22} />
-            </span>
-            <span className="stat-text">
-              <span className="stat-label">{label}</span>
-              <span className="stat-number">{two(counts[key])}</span>
-            </span>
+      <section className="kpis">
+        {kpis.map(({ key, label, Icon }) => (
+          <button key={key} className={`kpi ${statusFilter === key ? "on" : ""}`} onClick={() => setStatusFilter(statusFilter === key ? "todos" : key)}>
+            <span className="kpi-top"><Icon width={20} height={20} /> {label}</span>
+            <span className="kpi-num">{two(counts[key])}</span>
           </button>
         ))}
+        <div className="kpi">
+          <span className="kpi-top">Colchón de contenido</span>
+          <strong style={{ fontWeight: 500 }}>
+            {cover.days > 0 ? `Cubierto hasta el ${formatDate(cover.until)} · ${cover.days} días` : "Sin videos subidos por delante"}
+          </strong>
+          <div className="bar"><i style={{ width: `${Math.min(cover.days / 30, 1) * 100}%` }} /></div>
+        </div>
       </section>
 
-      {loading && <p className="muted pad">Cargando proyectos…</p>}
-      {loadError && <p className="error pad">{loadError}</p>}
+      {gaps > 0 && <div className="notice">Hay {gaps} {gaps === 1 ? "día" : "días"} sin proyecto antes de tu último video programado.</div>}
 
-      {!loading && !loadError && visible.length === 0 && (
-        <p className="muted pad">
-          {hasFilters
-            ? "Ningún proyecto coincide con tu búsqueda."
-            : "Todavía no hay proyectos. Tocá Agregar para crear el primero."}
-        </p>
-      )}
+      <div className="table-wrap">
+        {loading && <p className="muted empty">Cargando…</p>}
+        {loadError && <p className="error empty">{loadError}</p>}
+        {!loading && !loadError && visible.length === 0 && (
+          <p className="muted empty">{projects.length ? "Nada coincide con tu búsqueda." : "Todavía no hay frases. Tocá Agregar frases para empezar."}</p>
+        )}
+        {visible.length > 0 && (
+          <table>
+            <thead>
+              <tr><th style={{ width: 170 }}>Fecha</th><th>Frase</th><th style={{ width: 140 }}>Estado</th><th style={{ width: 190 }}>YouTube</th><th style={{ width: 60 }} /></tr>
+            </thead>
+            <tbody>
+              {visible.map((p) => {
+                const st = effectiveStatus(p);
+                const level = alertLevel(p);
+                const cls = level === "rojo" ? "a-bad" : level ? "a-warn" : "";
+                return (
+                  <tr key={p.id} className={`${cls} ${editing?.id === p.id ? "sel" : ""}`} onClick={() => setEditing(p)}>
+                    <td className="fixed">{formatDate(p.publish_date)}</td>
+                    <td>
+                      {p.phrase}
+                      {level && <span className={`alert-text ${level === "rojo" ? "bad" : "warn"}`}>{alertText(p)}</span>}
+                    </td>
+                    <td className="fixed"><span className={`pill ${st}`}>{statusLabel(st)}</span></td>
+                    <td className="fixed">
+                      {p.youtube_url ? <a className="yt" href={p.youtube_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Ver video</a> : <span className="muted">—</span>}
+                    </td>
+                    <td className="fixed"><button className="btn small" onClick={(e) => copy(e, p)} aria-label="Copiar frase"><CopyIcon width={15} height={15} /></button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
 
-      <ul className="list">
-        {visible.map((p) => {
-          const level = alertLevel(p);
-          return (
-            <li
-              key={p.id}
-              className={`item item-${p.status} ${level ? `alert-${level}` : ""}`}
-            >
-              <button className="item-main" onClick={() => setEditing(p)}>
-                <span className="phrase">{p.phrase}</span>
-                <span className="meta">
-                  <span className="date">
-                    <CalendarIcon width={18} height={18} />
-                    {formatDate(p.publish_date)}
-                  </span>
-                  {level && (
-                    <span className={`alert-text text-${level}`}>
-                      {alertText(p)}
-                    </span>
-                  )}
-                </span>
-              </button>
-
-              <div className="item-actions">
-                <div className="item-actions-row">
-                  {p.video_url && (
-                    <a
-                      className="btn outline small play"
-                      href={p.video_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="Ver video"
-                      title="Ver video"
-                    >
-                      <PlayIcon width={18} height={18} />
-                    </a>
-                  )}
-                  <button
-                    className="btn outline small"
-                    onClick={() => copyPhrase(p)}
-                    aria-label="Copiar frase"
-                  >
-                    <CopyIcon width={15} height={15} />
-                    Copiar
-                  </button>
-                </div>
-                <button
-                  className={`btn small status-btn status-${p.status}`}
-                  onClick={() => cycleStatus(p)}
-                  aria-label={`Estado: ${statusLabel(p.status)}. Tocar para cambiar`}
-                >
-                  {statusLabel(p.status)}
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-
-      {toast && (
-        <div className="toast" role="status">
-          {toast}
-        </div>
-      )}
-
-      {linkPrompt && (
-        <LinkPrompt
-          nextLabel={statusLabel(linkPrompt.next)}
-          onConfirm={confirmLink}
-          onCancel={() => setLinkPrompt(null)}
-        />
-      )}
-
-      {editing && (
-        <ProjectForm
-          initial={editing}
-          onSave={handleSave}
-          onDelete={handleDelete}
-          onClose={() => setEditing(null)}
-          onNotify={showToast}
-        />
-      )}
+      {toast && <div className="toast" role="status">{toast}</div>}
+      {batchOpen && <BatchForm startDate={nextDateAfterLast(projects.map((p) => p.publish_date))} takenDates={projects.map((p) => p.publish_date)} onSave={handleBatch} onClose={() => setBatchOpen(false)} />}
+      {editing && <ProjectDrawer key={editing.id} project={editing} onSave={handleSave} onDelete={handleDelete} onClose={() => setEditing(null)} onNotify={showToast} />}
     </main>
   );
 }
